@@ -1,0 +1,16 @@
+* Goal Read-only detection of proxy
+** Make request to maven central, read response and detect failure
+*** Things to check
+**** headers
+**** response body
+**** typical jvm proxy environment variables
+**** Hit https://repo1.maven.org/maven2/
+**** Download some scala library pom and jar files & checksums and verify checksums
+** Tech details
+*** Identify scala-cli http client (sttp)
+**** Create sttp request
+**** Execute request and check response status, headers, and body
+**** Execute pom request and check downloaded file checksum
+*** Use Props.envOrNone to check
+**** http_proxy, https_proxy, proxy username+pass, etc.
+*** Print diagnostic message and configuration instructions depending on findings.
