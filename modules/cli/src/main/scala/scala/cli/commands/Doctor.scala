@@ -6,6 +6,7 @@ import scala.build.internal.Constants
 import scala.cli.ScalaCli
 import scala.cli.internal.ProcUtil
 import scala.cli.signing.shared.Secret
+import scala.cli.commands.util.ScalaCliSttpBackend
 
 // current version / latest version + potentially information that
 // scala-cli should be updated (and that should take SNAPSHOT version
@@ -36,7 +37,7 @@ object Doctor extends ScalaCommand[DoctorOptions] {
     checkNativeDependencies()
     checkJSDependencies()
     // checkBinaryOrMainClass()??
-    checkAccessToMavneOrGithub()
+    checkAccessToMavenOrGithub()
     checkIsNativeOrJvm()
 
     println("") // sometimes last line is cut off
@@ -88,8 +89,54 @@ object Doctor extends ScalaCommand[DoctorOptions] {
 
   // checkBinaryOrMainClass()??
 
-  private def checkAccessToMavneOrGithub(): Unit = {
-    // TODO
+  private def checkAccessToMavenOrGithub(): Unit = {
+    // todo: maybe move to top?
+    import scala.cli.commands.util.CommonOps._
+    import scala.util.chaining._
+    val loggingOptions = LoggingOptions()
+    val logger         = loggingOptions.logger
+
+    val backend = ScalaCliSttpBackend.httpURLConnection(logger)
+
+    import sttp.client3.basicRequest
+    import sttp.client3._
+
+    try {
+      val responseMvnCentralDir = basicRequest.get(
+        uri"https://repo1.maven.org/maven2/ch/epfl/scala/library-example_2.13/1.0.1/"
+      ).send(backend)
+
+      val responseMvnCentralPom = basicRequest.get(
+        uri"https://repo1.maven.org/maven2/ch/epfl/scala/library-example_2.13/1.0.1/library-example_2.13-1.0.1.pom"
+      ).send(backend)
+
+      val responseMvnCentralJar = basicRequest.get(
+        uri"https://repo1.maven.org/maven2/ch/epfl/scala/library-example_2.13/1.0.1/library-example_2.13-1.0.1.jar"
+      ).send(backend)
+
+      val checks = List(
+        "mvncentral access"  -> (responseMvnCentralDir.code.code != 200),
+        "mvn central jar dl" -> (responseMvnCentralJar.code.code != 200),
+        "mvncentral pom dl"  -> (responseMvnCentralPom.code.code != 200),
+        "mvn central access proxied" -> ((responseMvnCentralDir.code.code == 403 || responseMvnCentralDir.code.code == 504) && responseMvnCentralDir.headers.exists(header => header.name == "Proxy-Connection" && header.value == "Keep-Alive"))
+      )
+
+      println(responseMvnCentralDir.code.code)
+
+
+      println("maven central checks:")
+      checks
+        .map { case (prompt, passed) => if(passed) s"$prompt: X" else s"$prompt: O" }.mkString(
+          "\t",
+          "\n\t",
+          ""
+        )
+        .pipe(println)
+    }
+    catch {
+      case ce: SttpClientException.ConnectException =>
+        println("Couldn't connect to maven central, maybe you're offline?")
+    }
   }
 
   private def checkIsNativeOrJvm(): Unit = {
